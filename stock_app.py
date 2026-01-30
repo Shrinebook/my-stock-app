@@ -45,4 +45,63 @@ target_dict = {
 }
 
 # --- 解析実行ボタン ---
-if st.button('分析を開始する
+if st.button('分析を開始する (全72銘柄)'):
+    results = []
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    tickers = list(target_dict.keys())
+    for i, ticker in enumerate(tickers):
+        status_text.text(f"解析中: {target_dict[ticker]} ({i+1}/{len(tickers)})")
+        progress_bar.progress((i + 1) / len(tickers))
+        
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="6mo")
+            if len(hist) < 75: continue
+
+            current_price = hist['Close'].iloc[-1]
+            ma75 = hist['Close'].rolling(window=75).mean().iloc[-1]
+            ma25 = hist['Close'].rolling(window=25).mean()
+            
+            # 直近3日騰落率
+            price_3d_ago = hist['Close'].iloc[-4]
+            return_3d = (current_price - price_3d_ago) / price_3d_ago * 100
+
+            # ロジック: 長期上昇トレンド中 且つ 直近3日で-1.5%以上の押し目
+            if current_price > ma75 and return_3d < -1.5:
+                results.append({
+                    'name': target_dict[ticker],
+                    'ticker': ticker,
+                    'price': current_price,
+                    'return_3d': return_3d,
+                    'hist': hist.tail(60),
+                    'ma25': ma25.tail(60)
+                })
+        except:
+            continue
+
+    status_text.text("解析完了！")
+    
+    if results:
+        # 下げ幅が大きい順に並べ替え
+        results.sort(key=lambda x: x['return_3d'])
+        
+        st.success(f"{len(results)}銘柄の押し目候補が見つかりました")
+        
+        for item in results:
+            # スマホで見やすいアコーディオン形式
+            with st.expander(f"📌 {item['name']} ({item['return_3d']:+.2f}%)"):
+                st.write(f"**現在値:** {item['price']:,.1f}円")
+                
+                # グラフ描画
+                fig, ax = plt.subplots(figsize=(8, 4))
+                ax.plot(item['hist']['Close'], label='株価', color='#1f77b4', linewidth=2)
+                ax.plot(item['ma25'], label='25日線', color='#ff7f0e', linestyle='--')
+                ax.set_title(f"{item['name']} の推移")
+                ax.grid(True, alpha=0.3)
+                ax.legend()
+                st.pyplot(fig)
+                plt.close()
+    else:
+        st.warning("現在、条件に合致する銘柄はありません。")
