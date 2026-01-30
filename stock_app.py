@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-import japanize_matplotlib  # 日本語化ライブラリ
 
 st.set_page_config(page_title="高配当株・押し目検知", layout="centered")
 
@@ -64,7 +63,7 @@ if st.button('分析を開始する'):
             price_3d_ago = hist['Close'].iloc[-4]
             return_3d = (current_price - price_3d_ago) / price_3d_ago * 100
 
-            # 条件: 75日線上 且つ 直近3日で-1.5%以上の押し目
+            # 判定: 75日線より上 かつ 直近3日で-1.5%以上の下落
             if current_price > ma75 and return_3d < -1.5:
                 results.append({
                     'name': name,
@@ -81,30 +80,27 @@ if st.button('分析を開始する'):
     status_text.text("解析完了！")
     
     if results:
-        # 3日騰落の下げ幅が大きい順
         results.sort(key=lambda x: x['return_3d'])
         st.success(f"{len(results)}銘柄見つかりました")
         
         for item in results:
-            # ラベルにコードと騰落率を表示
-            label = f"📌 {item['code']} {item['name']} (3日:{item['return_3d']:+.2f}%)"
-            with st.expander(label):
-                # 数値情報を横に並べる
-                col1, col2 = st.columns(2)
-                col1.metric("現在値", f"{item['price']:,.1f}円")
-                col2.metric("前日比", f"{item['daily']:+.2f}%")
+            # スマホで最も見やすい形式にレイアウト
+            title = f"📌 {item['code']} {item['name']}"
+            with st.expander(title):
+                # 数値情報を大きく表示
+                c1, c2, c3 = st.columns(3)
+                c1.metric("価格", f"{item['price']:,.0f}")
+                c2.metric("前日比", f"{item['daily']:+.2f}%")
+                c3.metric("3日騰落", f"{item['return_3d']:+.2f}%")
                 
-                st.write(f"**直近3日騰落:** {item['return_3d']:+.2f}%")
-                
-                # グラフ描画
+                # グラフ（文字化け回避のため英語ラベル）
                 fig, ax = plt.subplots(figsize=(8, 4))
-                ax.plot(item['hist']['Close'], label='株価', color='#1f77b4', linewidth=2)
-                ax.plot(item['ma25'], label='25日線', color='#ff7f0e', linestyle='--')
-                ax.set_title(f"{item['name']} ({item['code']}) 推移")
-                ax.set_ylabel("価格（円）")
+                ax.plot(item['hist']['Close'], label='Price', color='#1f77b4', linewidth=2)
+                ax.plot(item['ma25'], label='MA25', color='#ff7f0e', linestyle='--')
+                ax.set_title(f"Trend: {item['code']}")
                 ax.grid(True, alpha=0.3)
                 ax.legend()
                 st.pyplot(fig)
-                plt.close(fig) # メモリ節約
+                plt.close(fig)
     else:
-        st.warning("条件に合う銘柄はありませんでした。")
+        st.warning("現在、条件に合う銘柄はありません。")
