@@ -2,21 +2,14 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-
-# 日本語表示の設定（Streamlit Cloudでも動作するように調整）
-try:
-    import japanize_matplotlib
-except:
-    pass
+import japanize_matplotlib  # 日本語化ライブラリ
 
 st.set_page_config(page_title="高配当株・押し目検知", layout="centered")
 
 st.title("📈 高配当株 押し目検知")
-st.caption("数ヶ月は右肩上がり、直近3日は安い銘柄を抽出")
+st.caption("上昇トレンド中の『一時的な安値』を抽出")
 
-# ==========================================
 # 銘柄リスト（全72銘柄）
-# ==========================================
 target_dict = {
     '4503.T': 'アステラス製薬', '7476.T': 'アズワン', '2502.T': 'アサヒグループHD',
     '3407.T': '旭化成', '9202.T': 'ANA HD', '3292.T': 'イオンリート',
@@ -44,19 +37,18 @@ target_dict = {
     '2267.T': 'ヤクルト本社', '4732.T': 'ユー・エス・エス', '8051.T': '山善'
 }
 
-# --- 解析実行ボタン ---
-if st.button('分析を開始する (全72銘柄)'):
+if st.button('分析を開始する'):
     results = []
-    progress_bar = st.progress(0)
     status_text = st.empty()
+    progress_bar = st.progress(0)
     
-    tickers = list(target_dict.keys())
-    for i, ticker in enumerate(tickers):
-        status_text.text(f"解析中: {target_dict[ticker]} ({i+1}/{len(tickers)})")
+    tickers = list(target_dict.items())
+    for i, (code, name) in enumerate(tickers):
+        status_text.text(f"解析中: {name} ({i+1}/{len(tickers)})")
         progress_bar.progress((i + 1) / len(tickers))
         
         try:
-            stock = yf.Ticker(ticker)
+            stock = yf.Ticker(code)
             hist = stock.history(period="6mo")
             if len(hist) < 75: continue
 
@@ -64,16 +56,21 @@ if st.button('分析を開始する (全72銘柄)'):
             ma75 = hist['Close'].rolling(window=75).mean().iloc[-1]
             ma25 = hist['Close'].rolling(window=25).mean()
             
+            # 前日比
+            prev_close = hist['Close'].iloc[-2]
+            daily_change = (current_price - prev_close) / prev_close * 100
+            
             # 直近3日騰落率
             price_3d_ago = hist['Close'].iloc[-4]
             return_3d = (current_price - price_3d_ago) / price_3d_ago * 100
 
-            # ロジック: 長期上昇トレンド中 且つ 直近3日で-1.5%以上の押し目
+            # 条件: 75日線上 且つ 直近3日で-1.5%以上の押し目
             if current_price > ma75 and return_3d < -1.5:
                 results.append({
-                    'name': target_dict[ticker],
-                    'ticker': ticker,
+                    'name': name,
+                    'code': code.replace('.T', ''),
                     'price': current_price,
+                    'daily': daily_change,
                     'return_3d': return_3d,
                     'hist': hist.tail(60),
                     'ma25': ma25.tail(60)
@@ -84,24 +81,30 @@ if st.button('分析を開始する (全72銘柄)'):
     status_text.text("解析完了！")
     
     if results:
-        # 下げ幅が大きい順に並べ替え
+        # 3日騰落の下げ幅が大きい順
         results.sort(key=lambda x: x['return_3d'])
-        
-        st.success(f"{len(results)}銘柄の押し目候補が見つかりました")
+        st.success(f"{len(results)}銘柄見つかりました")
         
         for item in results:
-            # スマホで見やすいアコーディオン形式
-            with st.expander(f"📌 {item['name']} ({item['return_3d']:+.2f}%)"):
-                st.write(f"**現在値:** {item['price']:,.1f}円")
+            # ラベルにコードと騰落率を表示
+            label = f"📌 {item['code']} {item['name']} (3日:{item['return_3d']:+.2f}%)"
+            with st.expander(label):
+                # 数値情報を横に並べる
+                col1, col2 = st.columns(2)
+                col1.metric("現在値", f"{item['price']:,.1f}円")
+                col2.metric("前日比", f"{item['daily']:+.2f}%")
+                
+                st.write(f"**直近3日騰落:** {item['return_3d']:+.2f}%")
                 
                 # グラフ描画
                 fig, ax = plt.subplots(figsize=(8, 4))
                 ax.plot(item['hist']['Close'], label='株価', color='#1f77b4', linewidth=2)
                 ax.plot(item['ma25'], label='25日線', color='#ff7f0e', linestyle='--')
-                ax.set_title(f"{item['name']} の推移")
+                ax.set_title(f"{item['name']} ({item['code']}) 推移")
+                ax.set_ylabel("価格（円）")
                 ax.grid(True, alpha=0.3)
                 ax.legend()
                 st.pyplot(fig)
-                plt.close()
+                plt.close(fig) # メモリ節約
     else:
-        st.warning("現在、条件に合致する銘柄はありません。")
+        st.warning("条件に合う銘柄はありませんでした。")
