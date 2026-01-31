@@ -5,10 +5,13 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="高配当株・押し目検知", layout="centered")
 
-st.title("📈 高配当株 押し目検知")
+# 【修正点1】タイトルを小さく表示 (subheaderを使用)
+st.markdown("### 📈 高配当株 押し目検知")
 st.caption("上昇トレンド中の『一時的な安値』を抽出")
 
-# 銘柄リスト（全72銘柄）
+# ==========================================
+# 銘柄リスト（全73銘柄に更新）
+# ==========================================
 target_dict = {
     '4503.T': 'アステラス製薬', '7476.T': 'アズワン', '2502.T': 'アサヒグループHD',
     '3407.T': '旭化成', '9202.T': 'ANA HD', '3292.T': 'イオンリート',
@@ -33,8 +36,16 @@ target_dict = {
     '3003.T': 'ヒューリック', '4481.T': 'ベース', '3287.T': '星野リゾート・リート',
     '7267.T': '本田技研工業', '7148.T': 'FPG', '9983.T': 'ファーストリテイリング',
     '7730.T': 'マニー', '1417.T': 'ミライト・ワン', '8725.T': 'MS&AD',
-    '2267.T': 'ヤクルト本社', '4732.T': 'ユー・エス・エス', '8051.T': '山善'
+    '2267.T': 'ヤクルト本社', '4732.T': 'ユー・エス・エス', '8051.T': '山善',
+    '7164.T': '全国保証' # 追加しました
 }
+
+# 【修正点2】コア銘柄のリスト
+core_tickers = [
+    '7267.T', '8766.T', '3231.T', '9513.T', '5401.T', '7839.T', '7164.T', 
+    '7762.T', '9434.T', '2914.T', '5192.T', '2674.T', '1882.T', '8306.T', 
+    '6301.T', '4928.T', '8130.T', '4502.T'
+]
 
 if st.button('分析を開始する'):
     results = []
@@ -67,7 +78,8 @@ if st.button('分析を開始する'):
             if current_price > ma75 and return_3d < -1.5:
                 results.append({
                     'name': name,
-                    'code': code.replace('.T', ''),
+                    'code': code,
+                    'short_code': code.replace('.T', ''),
                     'price': current_price,
                     'daily': daily_change,
                     'return_3d': return_3d,
@@ -84,20 +96,21 @@ if st.button('分析を開始する'):
         st.success(f"{len(results)}銘柄見つかりました")
         
         for item in results:
-            # スマホで最も見やすい形式にレイアウト
-            title = f"📌 {item['code']} {item['name']}"
-            with st.expander(title):
-                # 数値情報を大きく表示
+            # 【修正点3】コア銘柄かどうかでラベルを分岐
+            is_core = item['code'] in core_tickers
+            core_mark = " ★(コア銘柄)" if is_core else ""
+            label = f"📌 {item['short_code']} {item['name']}{core_mark} (3日:{item['return_3d']:+.2f}%)"
+            
+            with st.expander(label):
                 c1, c2, c3 = st.columns(3)
                 c1.metric("価格", f"{item['price']:,.0f}")
                 c2.metric("前日比", f"{item['daily']:+.2f}%")
                 c3.metric("3日騰落", f"{item['return_3d']:+.2f}%")
                 
-                # グラフ（文字化け回避のため英語ラベル）
                 fig, ax = plt.subplots(figsize=(8, 4))
                 ax.plot(item['hist']['Close'], label='Price', color='#1f77b4', linewidth=2)
                 ax.plot(item['ma25'], label='MA25', color='#ff7f0e', linestyle='--')
-                ax.set_title(f"Trend: {item['code']}")
+                ax.set_title(f"Trend: {item['short_code']}")
                 ax.grid(True, alpha=0.3)
                 ax.legend()
                 st.pyplot(fig)
