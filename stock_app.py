@@ -57,12 +57,16 @@ if st.button('分析を開始する'):
 
         try:
             stock = yf.Ticker(code)
-            hist = stock.history(period="6mo")
+            # MA75を冒頭から出すため、表示期間より長い1年分を取得
+            hist = stock.history(period="1y")
             if len(hist) < 75: continue
 
             current_price = hist['Close'].iloc[-1]
-            ma75 = hist['Close'].rolling(window=75).mean()
-            ma25 = hist['Close'].rolling(window=25).mean()
+
+            # ポイント: 全期間（1年）のデータでMAを計算してからスライス
+            # → 表示範囲の先頭からラインが途切れずに描画される
+            ma75_full = hist['Close'].rolling(window=75).mean()
+            ma25_full = hist['Close'].rolling(window=25).mean()
 
             # 前日比
             prev_close = hist['Close'].iloc[-2]
@@ -72,9 +76,8 @@ if st.button('分析を開始する'):
             price_3d_ago = hist['Close'].iloc[-4]
             return_3d = (current_price - price_3d_ago) / price_3d_ago * 100
 
-            # ▼ 変更点③: 下落閾値を -4% に変更
-            if current_price > ma75.iloc[-1] and return_3d < -4.0:
-                # ▼ 変更点②: グラフ表示を約6ヶ月分（120営業日）に拡大
+            # 判定: 75日線より上 かつ 直近3日で-4%以上の下落
+            if current_price > ma75_full.iloc[-1] and return_3d < -4.0:
                 results.append({
                     'name': name,
                     'code': code,
@@ -82,9 +85,10 @@ if st.button('分析を開始する'):
                     'price': current_price,
                     'daily': daily_change,
                     'return_3d': return_3d,
-                    'hist': hist.tail(120),     # 60 → 120（約6ヶ月）
-                    'ma25': ma25.tail(120),
-                    'ma75': ma75.tail(120),     # ▼ 変更点①: 75日線を追加
+                    # 表示は直近120日（約6ヶ月）だが、MAは全期間から計算済みなので冒頭から表示される
+                    'hist': hist.tail(120),
+                    'ma25': ma25_full.tail(120),
+                    'ma75': ma75_full.tail(120),
                 })
         except:
             continue
@@ -109,7 +113,6 @@ if st.button('分析を開始する'):
                 fig, ax = plt.subplots(figsize=(8, 4))
                 ax.plot(item['hist']['Close'], label='Price', color='#1f77b4', linewidth=2)
                 ax.plot(item['ma25'],          label='MA25',  color='#ff7f0e', linestyle='--')
-                # ▼ 変更点①: 75日線をグラフに追加（緑の点線）
                 ax.plot(item['ma75'],          label='MA75',  color='#2ca02c', linestyle=':')
                 ax.set_title(f"Trend: {item['short_code']}")
                 ax.grid(True, alpha=0.3)
